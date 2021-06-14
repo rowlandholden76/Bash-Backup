@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# PURPOSE:
+# TO BACK UP ALL FILES AND FOLDERS FROM A GIVEN DIRECTORY
+# Directory to back up is set with the constant back_up_location
+# Directory to save the back up to is /it/backup/ and is set with the constant back_up_dir
+# Directory to save the log files to is /it/backup/log/ and is set by changing the tail end of the constant back_up_log_dir
+# Obviously additional directories can be added to the back up by adding additional constants and incorporating that tar command(s) to go with them
+
+# Written by Rowland Holden
+
+# This script could have used the find command to delete the old files
+# but that wouldn't have allowed for the logging of each deleted file so
+# I chose to do it the long way to get the logging I wanted
+
+# File Info: tar-share-backup @ cron.daily
+
+
+
+
+# Set constants
+
+today=$(date +%F)
+back_up_dir="/it/backup"
+back_up_path="${back_up_dir}/ShareBackup${today}.tar.gz"
+back_up_log_dir="${back_up_dir}/log"
+back_up_log_path="${back_up_log_dir}/ShareBackupLog${today}"
+back_up_location="/srv/share"
+back_up_profiles_loc="/home/profiles"
+back_up_profiles_path="${back_up_dir}/ProfilesBackUp${today}.tar.gz"
+
+# write errors to the log
+
+write_error () {
+
+  local  errortext=""
+
+  if [[ "${1}" -eq "pid" ]]; then
+    errortext="${0} is already running: canceling backup operation"
+  else
+    errortext="A backup file already exists: canceling backup operation"
+  fi
+
+  if [[ -f "${back_up_log_path}" ]]; then
+    echo "" >> "${back_up_log_path}"
+    echo "${errortext}" >> "${back_up_log_path}"
+  else
+    echo "${errortext}" > "${back_up_log_path}"
+  fi
+
+}
+
+for pid in $(pidof -x "$(basename "${0}")"); do
+    if [ "$pid" != "$$" ]; then
+        write_error "pid"
+        exit 1
+    fi
+done
+
+
+# Check to see if th back up tar file already exiists - if so let the user know in the log and exit -
+# do not continue because we don't know if the user wants to rm the file or not
+check_file () {
+
+  if [[ -f "${back_up_path}" ]] || [[ -f "${back_up_profiles}" ]]; then
+    write_error "File Exists"
+    exit 1
+  fi
+
+}
+
+del_files () {
+
+  local delcutoffdate=$(date -d "-7 days" +%m-%d-%Y) # sets date to 7 days ago
+
+  if [[ -f "${filepath}" ]]; then # make sure $file is an actual file and not a directory
+    if [[ "${moddate}" -ot "${delcutoffdate}" ]]; then  # Compares the file modified date to the cut off date for deletion - anything older than 7 days
+      echo "  ${file} deleted from ${dir}" >> "${back_up_log_path}"
+      echo "    moddate: ${moddate}" >> "${back_up_log_path}"
+      echo "    Cut Off: ${delcutoffdate}" >> "${back_up_log_path}"
+      echo "    test: ${moddate} -ot ${delcutoffdate}" >> "${back_up_log_path}"
+      rm "${filepath}" >> "${back_up_log_path}"
+    fi
+  fi
+
+}
+
+cycle_files () {
+
+  for file in "${files[@]}"; do # for each file in the currect directory do the follwing loop
+    filepath="${file}" # prefix the filename with the directory path for file manipulation
+    moddate=$(date -r "${filepath}" +%m-%d-%Y) # Gets modified date of a file
+
+    del_files #"${filepath}" "${moddate}" "${file}" "${dir}"
+  done
+
+}
+
+cycle_dirs () {
+
+  for dir in "${dirs[@]}"; do # for each directory do the following loop
+    files=("${dir}"/*) # list all files in $dir and put them in an array
+    echo "Enterying: ${dir}" >> "${back_up_log_path}"
+
+    cycle_files #"${files[@]}" "${dir}"
+  done
+
+}
+
+delete_old_files () {
+
+  echo "" >> "${back_up_log_path}"
+  echo "" >> "${back_up_log_path}"
+  echo "The folowing files were deleted:" >> "${back_up_log_path}"
+  echo "" >> "${back_up_log_path}"
+
+  dirs=( "${back_up_dir}" "${back_up_log_dir}" ) # create an array of directorys to cycle through for deleting old back up and log files
+  cycle_dirs  "${dirs[@]}"
+
+}
+
+check_file
+
+# Back up files
+
+echo "The following files were backed up:" > "${back_up_log_path}" # if we have gotten this far we have a clean back up file so lets also do a clean log
+echo "" >> "${back_up_log_path}"
+
+tar -czvf "${back_up_path}" "${back_up_location}" >> "${back_up_log_path}"
+tar -czvf "${back_up_profiles_path}" "${back_up_profiles_loc}" >> "${back_up_log_path}"
+# Delete old log and back up files
+  delete_old_files
+
+exit 0
