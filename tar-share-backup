@@ -71,7 +71,7 @@ check_file () {
 
 del_files () {
 
-  local delcutoffdate=$(date -d "-7 days" +%m-%d-%Y) # sets date to 7 days ago
+  local delcutoffdate=$(date -d "-7 days" +%F) # sets date to 7 days ago
 
   if [[ -f "${filepath}" ]]; then # make sure $file is an actual file and not a directory
     if [[ "${moddate}" -ot "${delcutoffdate}" ]]; then  # Compares the file modified date to the cut off date for deletion - anything older than 7 days
@@ -89,7 +89,7 @@ cycle_files () {
 
   for file in "${files[@]}"; do # for each file in the currect directory do the follwing loop
     filepath="${file}" # prefix the filename with the directory path for file manipulation
-    moddate=$(date -r "${filepath}" +%m-%d-%Y) # Gets modified date of a file
+    moddate=$(date -r "${filepath}" +%F) # Gets modified date of a file
 
     del_files #"${filepath}" "${moddate}" "${file}" "${dir}"
   done
